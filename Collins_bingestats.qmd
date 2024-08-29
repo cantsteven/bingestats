@@ -25,7 +25,7 @@ library(rstatix) #for getsummarystats
 ```{r}
 #Loading in data 
 
-binge_stats <- read.csv("~/Documents/R Projects/binge_stats/binge_master_file.csv")
+binge_stats <- read.csv("~/Documents/R Projects/binge_stats/bingestats/binge_master_file.csv")
 
 #creating a unique_id column for the repeated measures anovas coming up 
 binge_stats <- binge_stats %>%
