@@ -1,0 +1,639 @@
+---
+title: "Collins_bingestats"
+format: html
+editor: visual
+---
+
+## Male vs Female Binge Stats Comparison
+
+Stats for each figure appear first, followed by the graph
+
+Note:
+
+-   for behavioral intoxication time points, the first number indicates the day, the second the time point. For instance, beh_2_3 means day 2 time point 3 (11pm)
+
+-   for withdrawal time points, the number indicates the hours after the last dose of ethanol. For instance, with_15 means 15 hours following the last dose of ethanol.
+
+```{r}
+library(tidyverse)
+library(ggprism) #for prism theme
+library(lmerTest) #for repeated measures anovas 
+library(emmeans) #for post hoc test
+library(rstatix) #for getsummarystats
+```
+
+```{r}
+#Loading in data 
+
+binge_stats <- read.csv("binge_master_file.csv")
+
+#creating a unique_id column for the repeated measures anovas coming up 
+binge_stats <- binge_stats %>%
+  mutate(unique_id = paste(study, subject_id, sep = "_"))
+
+#filtering out rats that died early, anything that's not an ethanol
+binge_stats_filtered <- binge_stats %>%
+filter(early_death == "no", treatment == "ethanol"
+       ,study %in% c("srtx1", "srtx2", "srtx3", "srtx4", "big") #exclusing gub2
+       #,binge_location == "kentucky "
+       )
+
+#counting males vs females by study
+binge_stats_filtered %>%
+  group_by(study) %>%
+  summarize(
+    female_count = sum(sex == "female"),
+    male_count = sum(sex == "male")
+  )
+
+#counting males vs females by study
+binge_stats_filtered %>%
+  group_by(binge_location) %>%
+  summarize(
+    female_count = sum(sex == "female"),
+    male_count = sum(sex == "male")
+  )
+
+#counting males vs females by study
+binge_stats_filtered %>%
+  summarize(
+    female_count = sum(sex == "female"),
+    male_count = sum(sex == "male")
+  )
+
+  
+```
+
+**Figure 1B: Behavioral Intoxication Over Time**
+
+```{r}
+#Creating Data Frame 
+behav_intox <- binge_stats_filtered %>%
+  select(6, 20:31, 50) %>% #selecting relevant columns of binge_stats
+  pivot_longer(
+    cols = -c(unique_id, sex),
+    names_to = "time",
+    values_to = "intox_score"
+  ) 
+
+#creating summary statistics 
+behav_intox_grouped <- behav_intox %>%
+  group_by(sex, time) %>%
+  get_summary_stats(intox_score, show = c("mean", "sd", "se", "ci"))
+print(behav_intox_grouped, n=100)
+
+#creating model and running anova
+model_behavintox <- lmer(intox_score ~ sex * time + (1 | unique_id), data = behav_intox)
+model_behavintox_anova <- anova(model_behavintox)
+print(model_behavintox_anova)
+
+#posthoc test
+emmeans_behavintox <- emmeans(model_behavintox, ~sex | time)
+emmeans_behavintox_results <- pairs(emmeans_behavintox)
+print(emmeans_behavintox_results)
+
+#graph of behavioral intoxication over time 
+ggplot(data = behav_intox_grouped, aes(x = time, y = mean, color = sex, group = sex)) + 
+  geom_line(size = 1) + 
+  geom_point() + 
+  geom_errorbar(aes(y = mean, ymin = mean - se, ymax = mean + se, fill = sex), alpha = .5, width = 0.5) + 
+  ylim(-.25, 5) + 
+  scale_x_discrete(labels=c("beh_1_1" = "", 
+                            "beh_1_2" = "Day 1",
+                            "beh_1_3" = "",
+                            "beh_2_1" = "", 
+                            "beh_2_2" = "Day 2",
+                            "beh_2_3" = "",
+                            "beh_3_1" = "", 
+                            "beh_3_2" = "Day 3",
+                            "beh_3_3" = "",
+                            "beh_4_1" = "", 
+                            "beh_4_2" = "Day 4",
+                            "beh_4_3" = ""
+                            )) +
+  ylab("Mean Behavioral Intoxication Score") + 
+  xlab("Ethanol Treatment") + 
+  theme_prism() +
+  theme(legend.position = "none")
+
+results_path <- "binge_stats_graphs"
+
+ggsave(
+  "/behav_intox_time.png",
+  path = results_path,
+  height = 5,
+  width = 8.8
+  )
+
+```
+
+**Figure 1C: Mean Behavioral Intoxication**
+
+```{r}
+#calculating summary statistics 
+behav_intox_grouped_average<- behav_intox %>%
+  group_by(sex, unique_id) %>%
+  summarize(mean_intox_score = mean(intox_score))
+
+#data frame for the jittered points
+behav_intox_average <- behav_intox %>%
+  group_by(unique_id, sex) %>%
+  summarize(mean = mean(intox_score))
+
+#calculating summmary statistics 
+behav_intox_grouped_average_stats <- behav_intox_grouped_average %>%
+  get_summary_stats(mean_intox_score, show = c("mean", "sd", "se", "ci"))
+behav_intox_grouped_average_stats
+
+#t.test
+behav_intox_t.test <- t.test(mean_intox_score ~ sex, data = behav_intox_grouped_average)
+behav_intox_t.test
+
+#mean behavioral intoxication graph 
+ggplot(data = behav_intox_grouped_average_stats, aes(x = sex, y = mean)) + 
+  geom_bar(aes(fill = sex), stat = "summary", fun = "mean", alpha = 0.5, width = 0.5, color = "black") + 
+  geom_jitter(data = behav_intox_average, aes(x=sex, y = mean, color = sex), alpha = 0.5, stroke = NA, width = 0.25) + 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                width = 0.2,
+                color = "black",
+                size = 0.5) +  
+  theme_prism() + 
+  ylab("Mean Behavioral Intoxication Score") +
+  scale_x_discrete(labels=c("female" = "Female", 
+                            "male" = "Male")) + 
+  xlab("Sex") + 
+  scale_y_continuous(limits = c(0,5), expand = c(0, 0)) + 
+  theme(legend.position = "none")
+
+ggsave(
+  "/behav_intox_mean.png",
+  path = results_path,
+  height = 4,
+  width = 2.5
+  )
+
+```
+
+**Figure 1D: Peak Behavioral Intoxication**
+
+```{r}
+#getting the max intox score
+behav_intox_grouped_peak<- behav_intox %>%
+  group_by(sex, unique_id) %>%
+  summarize(max_intox_score = max(intox_score)) #calculating max intox score 
+
+#data frame for the jittered points
+behav_intox_peak <- behav_intox %>%
+  group_by(unique_id, sex) %>%
+  summarize(mean = max(intox_score))
+  
+#calculating summmary statistics 
+behav_intox_grouped_peak_stats <- behav_intox_grouped_peak %>%
+  get_summary_stats(max_intox_score, show = c("mean", "sd", "se", "ci"))
+behav_intox_grouped_peak_stats
+
+#t.test
+behav_intox_peak_t.test <- t.test(max_intox_score ~ sex, data = behav_intox_grouped_peak)
+behav_intox_peak_t.test
+
+#mean behavioral intoxication graph 
+ggplot(data = behav_intox_grouped_peak_stats, aes(x = sex, y = mean)) + 
+  geom_bar(aes(fill = sex), stat = "summary", fun = "mean", alpha = 0.5, width = 0.5, color = "black") + 
+  geom_jitter(data = behav_intox_peak, aes(x=sex, y = mean, color = sex), alpha = 0.5, stroke = NA, width = 0.25, height = 0.1) + 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                width = 0.3,
+                color = "black",
+                size = 0.5) +  
+  theme_prism() + 
+  ylab("Peak Behavioral Intoxication Score") +
+  scale_x_discrete(labels=c("female" = "Female", 
+                            "male" = "Male")) + 
+  xlab("Sex") + 
+  scale_y_continuous(limits = c(0,5), expand = c(0, 0)) + 
+  theme(legend.position = "none")
+
+ggsave(
+  "/behav_intox_peak.png",
+  path = results_path,
+  height = 4,
+  width = 2.5
+  )
+
+```
+
+**Figure 2A: Ethanol Dose Per Day**
+
+```{r}
+#Creating Data Frame 
+dose_day <- binge_stats_filtered %>%
+  select(6, 13:16, 50) %>% #selecting relevant columns of binge_stats
+  pivot_longer(
+    cols = -c(unique_id, sex),
+    names_to = "time",
+    values_to = "dose"
+  ) 
+
+#creating summary statistics 
+dose_day_grouped <- dose_day %>%
+  group_by(sex, time) %>%
+  get_summary_stats(dose, show = c("mean", "sd", "se", "ci"))
+dose_day_grouped
+
+#creating model and running anova
+model_dose <- lmer(dose ~ sex * time + (1 | unique_id), data = dose_day)
+model_dose_anova <- anova(model_dose)
+print(model_dose_anova)
+
+#posthoc test
+emmeans_dose <- emmeans(model_dose, ~sex | time)
+emmeans_dose_results <- pairs(emmeans_dose)
+print(emmeans_dose_results)
+
+#graph of behavioral intoxication over time 
+ggplot(data = dose_day_grouped, aes(x = time, y = mean, color = sex, group = sex)) + 
+  geom_line(size = 1) + 
+  geom_point() + 
+  geom_errorbar(aes(y = mean, ymin = mean - se, ymax = mean + se, fill = sex), alpha = .5, width = 0.25) + 
+  ylim(-.25, 15) + 
+  scale_x_discrete(labels=c("dose_day1" = "Day 1", 
+                            "dose_day2" = "Day 2",
+                            "dose_day3" = "Day 3",
+                            "dose_day4" = "Day 4"
+                            )) +
+  ylab("Mean Ethanol Dose (g/kg)") + 
+  xlab("Ethanol Treatment") + 
+  theme_prism() +
+  theme(legend.position = "none")
+
+ggsave(
+  "/day_dose.png",
+  path = results_path,
+  height = 5,
+  width = 8.8
+  )
+```
+
+**Figure 2B: Mean Dose**
+
+```{r}
+#calculating summary statistics 
+dose_day_grouped_2<- dose_day %>%
+  group_by(sex) %>%
+  get_summary_stats(dose, show = c("mean", "sd", "se", "ci"))
+dose_day_grouped_2
+
+#data frame for the jittered points
+dose_day_mean <- dose_day %>%
+  group_by(unique_id, sex) %>%
+  summarize(mean = mean(dose))
+
+#t.test
+dose_t.test <- t.test(dose ~ sex, data = dose_day)
+dose_t.test
+
+#mean dosegraph 
+ggplot(data = dose_day_grouped_2, aes(x = sex, y = mean)) + 
+  geom_bar(aes(fill = sex), stat = "summary", fun = "mean", alpha = 0.5, width = 0.5, color = "black") +
+  geom_jitter(data = dose_day_mean, aes(x=sex, y = mean, color = sex), alpha = 0.5, stroke = NA, width = 0.25, height = 0.1) + 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                width = 0.3,
+                color = "black",
+                size = 0.5) +   
+  theme_prism() + 
+  ylab("Mean Dose (g/kg/day") +
+  scale_x_discrete(labels=c("female" = "Female", 
+                            "male" = "Male")) + 
+  xlab("Sex") + 
+  scale_y_continuous(limits = c(0,15), expand = c(0, 0)) + 
+  theme(legend.position = "none")
+
+ggsave(
+  "/dose.png",
+  path = results_path,
+  height = 4,
+  width = 3
+  )
+
+```
+
+**Figure 2C: BEC**
+
+```{r}
+#Creating Data Frame 
+bec <- binge_stats_filtered %>%
+  select(6, 19, 50)  #selecting relevant columns of binge_stats
+ 
+#calculating summary statistics 
+bec_grouped<- bec %>%
+  group_by(sex) %>%
+  get_summary_stats(mean_bec, show = c("mean", "sd", "se", "ci"))
+bec_grouped
+
+#t.test
+dose_t.test <- t.test(mean_bec ~ sex, data = bec)
+dose_t.test
+
+#mean bec 
+ggplot(data = bec_grouped, aes(x = sex, y = mean)) + 
+  geom_bar(aes(fill = sex), stat = "summary", fun = "mean", alpha = 0.5, width = 0.5, color = "black") +
+  geom_jitter(data = bec, aes(x=sex, y = mean_bec, color = sex), alpha = 0.5, stroke = NA, width = 0.25, height = 0.1) + 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se, color = sex),
+                width = 0.3,
+                color = "black",
+                size = 0.5) +   
+  theme_prism() + 
+  ylab("BEC (mg/dl)") +
+  scale_x_discrete(labels=c("female" = "Female", 
+                            "male" = "Male")) + 
+  xlab("Sex") + 
+  scale_y_continuous(limits = c(0,700), expand = c(0, 0)) + 
+  theme(legend.position = "none")
+
+ggsave(
+  "/bec.png",
+  path = results_path,
+  height = 4,
+  width = 3
+  )
+
+
+```
+
+**Figure 3A: Withdrawal Over Time**
+
+```{r}
+#Creating Data Frame 
+withdrawal <- binge_stats_filtered %>%
+  select(6, 32:48, 50) %>% #selecting relevant columns of binge_stats
+  pivot_longer(
+    cols = -c(unique_id, sex),
+    names_to = "time",
+    values_to = "with_score"
+  ) 
+
+#creating summary statistics 
+withdrawal_grouped <- withdrawal %>%
+  group_by(sex, time) %>%
+  get_summary_stats(with_score, show = c("mean", "sd", "se", "ci"))
+print(withdrawal_grouped, n=100)
+
+#creating model and running anova
+model_withdrawal <- lmer(with_score ~ sex * time + (1 | unique_id), data = withdrawal)
+model_withdrawal_anova <- anova(model_withdrawal)
+print(model_withdrawal_anova)
+
+#posthoc test
+emmeans_withdrawal <- emmeans(model_withdrawal, ~sex | time)
+emmeans_withdrawal_results <- pairs(emmeans_withdrawal)
+print(emmeans_withdrawal_results)
+
+#graph of behavioral intoxication over time 
+ggplot(data = withdrawal_grouped, aes(x = time, y = mean, color = sex, group = sex)) + 
+  geom_line(size = 1) + 
+  geom_point() + 
+  geom_errorbar(aes(y = mean, ymin = mean - se, ymax = mean + se, fill = sex), alpha = .5, width = 0.5) + 
+  ylim(-.25, 3) + 
+  scale_x_discrete(labels=c("with_10" = "10", 
+                            "with_11" = "11",
+                            "with_12" = "12", 
+                            "with_13" = "13",
+                            "with_14" = "14", 
+                            "with_15" = "15",
+                            "with_16" = "16", 
+                            "with_17" = "17",
+                            "with_18" = "18", 
+                            "with_19" = "19",
+                            "with_20" = "20", 
+                            "with_21" = "21",
+                            "with_22" = "22", 
+                            "with_23" = "23",
+                            "with_24" = "24", 
+                            "with_25" = "25",
+                            "with_26" = "26"
+                            )) +
+  ylab("Mean Withdrawal Score") + 
+  xlab("Hours Since Last Ethanol Dose") + 
+  theme_prism() +
+  theme(legend.position = "none")
+
+ggsave(
+  "/withdrawal_time.png",
+  path = results_path,
+  height = 5,
+  width = 8.8
+  )
+
+```
+
+**FIgure 3B: Mean Withdrawal**
+
+```{r}
+#calculating summary statistics 
+withdrawal_grouped_average<- withdrawal %>%
+  group_by(sex, unique_id) %>%
+  summarize(mean_with_score = mean(with_score, na.rm = TRUE)) #calculating max intox score 
+
+#calculating summmary statistics 
+withdrawal_grouped_average_stats <- withdrawal_grouped_average %>%
+  get_summary_stats(mean_with_score, show = c("mean", "sd", "se", "ci"))
+withdrawal_grouped_average_stats
+
+#t.test
+withdrawal_average_t.test <- t.test(mean_with_score ~ sex, data = withdrawal_grouped_average)
+withdrawal_average_t.test
+
+#mean withdrawal intoxication graph 
+ggplot(data = withdrawal_grouped_average_stats, aes(x = sex, y = mean)) + 
+  geom_bar(aes(fill = sex), stat = "summary", fun = "mean", alpha = 0.5, width = 0.5, color = "black") + 
+  geom_jitter(data = withdrawal_grouped_average, aes(x=sex, y = mean_with_score, color = sex), alpha = 0.5, stroke = NA, width = 0.25) + 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                width = 0.2,
+                color = "black",
+                size = 0.5) +  
+  theme_prism() + 
+  ylab("Mean Withdrawal Score") +
+  scale_x_discrete(labels=c("female" = "Female", 
+                            "male" = "Male")) + 
+  xlab("Sex") + 
+  scale_y_continuous(limits = c(0,5), expand = c(0, 0)) + 
+  theme(legend.position = "none")
+
+ggsave(
+  "/withdrawal_mean.png",
+  path = results_path,
+  height = 4,
+  width = 2.5
+  )
+
+```
+
+**Figure : Peak Withdrawal**
+
+```{r}
+#getting the max intox score
+withdrawal_grouped_peak<- withdrawal %>%
+  group_by(sex, unique_id) %>%
+  summarize(max_with_score = max(with_score, na.rm = TRUE)) #calculating max intox score 
+  
+#calculating summmary statistics 
+withdrawal_grouped_peak_stats <- withdrawal_grouped_peak %>%
+  get_summary_stats(max_with_score, show = c("mean", "sd", "se", "ci"))
+withdrawal_grouped_peak_stats
+
+#t.test
+withdrawal_peak_t.test <- t.test(max_with_score ~ sex, data = withdrawal_grouped_peak)
+withdrawal_peak_t.test
+
+#mean behavioral intoxication graph 
+ggplot(data = withdrawal_grouped_peak_stats, aes(x = sex, y = mean)) + 
+  geom_bar(aes(fill = sex), stat = "summary", fun = "mean", alpha = 0.5, width = 0.5, color = "black") + 
+  geom_jitter(data = withdrawal_grouped_peak, aes(x=sex, y = max_with_score, color = sex), alpha = 0.5, stroke = NA, width = 0.25, height = 0.1) + 
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                width = 0.3,
+                color = "black",
+                size = 0.5) +  
+  theme_prism() + 
+  ylab("Peak Withdrawal Score") +
+  scale_x_discrete(labels=c("female" = "Female", 
+                            "male" = "Male")) + 
+  xlab("Sex") + 
+  scale_y_continuous(limits = c(0,5), expand = c(0, 0)) + 
+  theme(legend.position = "none")
+
+ggsave(
+  "/withdrawal_peak.png",
+  path = results_path,
+  height = 4,
+  width = 2.5
+  )
+
+
+# Check for NA values in the with_score column
+sum(is.na(withdrawal$with_score))
+
+# Check for NA values in the grouping columns
+sum(is.na(withdrawal$sex))
+sum(is.na(withdrawal$unique_id))
+
+# Inspect the data to understand the distribution of NA values
+summary(withdrawal)
+
+
+```
+
+**Female Correlations**
+
+```{r}
+female_behav_intox_average <- behav_intox_average |> 
+  filter(sex == "female") |> 
+  arrange(unique_id)
+
+#Average BEC
+female_bec <- bec |> 
+  filter(sex == "female") |> 
+  arrange(unique_id) |>
+  as_tibble()
+
+#average WD
+female_withdrawal_average <- withdrawal_grouped_average |> 
+  filter(sex == "female") |> 
+  arrange(unique_id)
+
+#peak WD
+female_withdrawal_peak <- withdrawal_grouped_peak |> 
+  filter(sex == "female") |> 
+  arrange(unique_id)
+
+#combining data so that varaibles match to subject
+female_correlation_variables <- female_behav_intox_average |>
+  inner_join(female_bec) |>
+  inner_join(female_withdrawal_average) |>
+  inner_join(female_withdrawal_peak)
+
+#correlation analysis 
+
+female_behav_intox_vs_meanWD <- cor.test(female_correlation_variables$mean, female_correlation_variables$mean_with_score, method = "spearman")
+
+female_behav_intox_vs_peakWD <- cor.test(female_correlation_variables$mean, female_correlation_variables$max_with_score, method = "spearman")
+
+female_BEC_vs_meanWD <- cor.test(female_correlation_variables$mean_bec, female_correlation_variables$mean_with_score, method = "spearman")
+  
+female_BEC_vs_peakWD <- cor.test(female_correlation_variables$mean_bec, female_correlation_variables$max_with_score,method = "spearman")
+
+female_behav_intox_vs_BEC <- cor.test(female_correlation_variables$mean, female_correlation_variables$mean_bec, method = "spearman")
+
+female_behav_intox_vs_meanWD
+female_behav_intox_vs_peakWD
+female_BEC_vs_meanWD
+female_BEC_vs_peakWD
+female_behav_intox_vs_BEC
+
+```
+
+**Male Correlations**
+
+```{r}
+male_behav_intox_average <- behav_intox_average |> 
+  filter(sex == "male") |> 
+  arrange(unique_id)
+
+#Average BEC
+male_bec <- bec |> 
+  filter(sex == "male") |> 
+  arrange(unique_id) |>
+  as_tibble()
+
+#average WD
+male_withdrawal_average <- withdrawal_grouped_average |> 
+  filter(sex == "male") |> 
+  arrange(unique_id)
+
+#peak WD
+male_withdrawal_peak <- withdrawal_grouped_peak |> 
+  filter(sex == "male") |> 
+  arrange(unique_id)
+
+#combining data so that varaibles match to subject
+male_correlation_variables <- male_behav_intox_average |>
+  inner_join(male_bec) |>
+  inner_join(male_withdrawal_average) |>
+  inner_join(male_withdrawal_peak)
+
+#correlation analysis 
+
+male_behav_intox_vs_meanWD <- cor.test(male_correlation_variables$mean, male_correlation_variables$mean_with_score, method = "spearman")
+
+male_behav_intox_vs_peakWD <- cor.test(male_correlation_variables$mean, male_correlation_variables$max_with_score, method = "spearman")
+
+male_BEC_vs_meanWD <- cor.test(male_correlation_variables$mean_bec, male_correlation_variables$mean_with_score, method = "spearman")
+
+male_BEC_vs_peakWD <- cor.test(male_correlation_variables$mean_bec, male_correlation_variables$max_with_score,method = "spearman")
+
+male_behav_intox_vs_BEC <- cor.test(male_correlation_variables$mean, male_correlation_variables$mean_bec, method = "spearman")
+
+male_behav_intox_vs_meanWD
+male_behav_intox_vs_peakWD
+male_BEC_vs_meanWD
+male_BEC_vs_peakWD
+male_behav_intox_vs_BEC
+```
+
+Chi-Square Test: Convulsions
+
+```{r}
+#creating a new column showing who didn't and did have a convulsions 
+withdrawal_grouped_peak_convul <- withdrawal_grouped_peak |> 
+  ungroup() |>
+  mutate(convulsions = case_when(max_with_score < 3.8 ~ "no",
+                                 max_with_score >= 3.8 ~ "yes"))
+                                
+#table showing the percentage of convulsions 
+observed_convulsions <- table(withdrawal_grouped_peak_convul$sex, withdrawal_grouped_peak_convul$convulsions)
+observed_convulsions
+
+#chi square test looking at convulsions between males and females
+chisq.test(observed_convulsions)
+
+#percentage of convulsions
+prop.table(observed_convulsions) * 100
+```
