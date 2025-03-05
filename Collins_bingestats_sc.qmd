@@ -634,6 +634,46 @@ observed_convulsions
 #chi square test looking at convulsions between males and females
 chisq.test(observed_convulsions)
 
-#percentage of convulsions
-prop.table(observed_convulsions) * 100
+```
+
+**Percentage of Convulsions:**
+
+**Female**
+
+```{r}
+female_convlusions <- withdrawal_grouped_peak |> 
+  filter(sex == "female") |> 
+  arrange(unique_id) |> 
+  filter(max_with_score == "3.8") |>
+  nrow()
+# number of female WD scores 
+female_wdn <- withdrawal_grouped_peak |> 
+  filter(sex == "female") |> 
+  arrange(unique_id) |> 
+  nrow()
+
+#female convulsions percentage
+female_percent_by_group <- (female_convlusions /  female_wdn) * 100
+female_percent_by_group
+
+
+```
+
+**Male**
+
+```{r}
+#number of male convulsions
+male_convlusions <- withdrawal_grouped_peak |> 
+  filter(sex == "male") |> 
+  arrange(unique_id) |> 
+  filter(max_with_score == "3.8") |>
+  nrow()
+# number of male WD scores 
+male_wdn <- withdrawal_grouped_peak |> 
+  filter(sex == "male") |> 
+  arrange(unique_id) |> 
+  nrow()
+#male convulsions percentage
+Male_percent_by_group <- (male_convlusions /  male_wdn) * 100
+Male_percent_by_group 
 ```
