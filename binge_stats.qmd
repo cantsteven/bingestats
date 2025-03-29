@@ -258,7 +258,7 @@ ggplot(data = dose_day_grouped, aes(x = time, y = mean, color = sex, group = sex
   geom_line(size = 0.5) + 
   geom_point() + 
   geom_errorbar(aes(y = mean, ymin = mean - se, ymax = mean + se, fill = sex), alpha = .5, width = 0.15) + 
-  ylim(-.25, 15) + 
+  scale_y_continuous(limits = c(0,15), expand = c(0, 0)) + 
   scale_x_discrete(labels=c("dose_day1" = "Day 1", 
                             "dose_day2" = "Day 2",
                             "dose_day3" = "Day 3",
