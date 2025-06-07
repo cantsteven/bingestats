@@ -20,6 +20,8 @@ library(ggprism) #for prism theme
 library(lmerTest) #for repeated measures anovas 
 library(emmeans) #for post hoc test
 library(rstatix) #for getsummarystats
+library(effectsize) #for effect size
+library(rcompanion) #for effect size
 ```
 
 ```{r}
@@ -83,12 +85,13 @@ behav_intox_grouped <- behav_intox %>%
 print(behav_intox_grouped, n=100)
 
 #creating model and running anova
+options(contrasts = c("contr.sum", "contr.poly"))
 model_behavintox <- lmer(intox_score ~ sex * time + (1 | unique_id), data = behav_intox)
 model_behavintox_anova <- anova(model_behavintox)
 print(model_behavintox_anova)
 
 #posthoc test
-emmeans_behavintox <- emmeans(model_behavintox, ~sex | time)
+emmeans_behavintox <- emmeans(model_behavintox, ~ sex | time)
 emmeans_behavintox_results <- pairs(emmeans_behavintox)
 print(emmeans_behavintox_results)
 
@@ -240,6 +243,7 @@ dose_day_grouped <- dose_day %>%
 dose_day_grouped
 
 #creating model and running anova
+options(contrasts = c("contr.sum", "contr.poly"))
 model_dose <- lmer(dose ~ sex * time + (1 | unique_id), data = dose_day)
 model_dose_anova <- anova(model_dose)
 print(model_dose_anova)
@@ -330,8 +334,8 @@ bec_grouped<- bec %>%
 bec_grouped
 
 #t.test
-dose_t.test <- t.test(mean_bec ~ sex, data = bec)
-dose_t.test
+bec_t.test <- t.test(mean_bec ~ sex, data = bec)
+bec_t.test
 
 #mean bec 
 ggplot(data = bec_grouped, aes(x = sex, y = mean)) + 
@@ -378,6 +382,7 @@ withdrawal_grouped <- withdrawal %>%
 print(withdrawal_grouped, n=100)
 
 #creating model and running anova
+options(contrasts = c("contr.sum", "contr.poly"))
 model_withdrawal <- lmer(with_score ~ sex * time + (1 | unique_id), data = withdrawal)
 model_withdrawal_anova <- anova(model_withdrawal)
 print(model_withdrawal_anova)
@@ -599,7 +604,7 @@ male_correlation_variables <- male_behav_intox_average |>
   inner_join(male_withdrawal_average) |>
   inner_join(male_withdrawal_peak)
 
-#correlation analysis 
+#correlation analysis
 
 male_behav_intox_vs_meanWD <- cor.test(male_correlation_variables$mean, male_correlation_variables$mean_with_score, method = "spearman")
 
@@ -632,8 +637,8 @@ observed_convulsions <- table(withdrawal_grouped_peak_convul$sex, withdrawal_gro
 observed_convulsions
 
 #chi square test looking at convulsions between males and females
-chisq.test(observed_convulsions)
-
+convul_chi <- chisq.test(observed_convulsions)
+convul_chi
 ```
 
 **Percentage of Convulsions:**
@@ -676,4 +681,115 @@ male_wdn <- withdrawal_grouped_peak |>
 #male convulsions percentage
 Male_percent_by_group <- (male_convlusions /  male_wdn) * 100
 Male_percent_by_group 
+```
+
+\
+Tolerance Planned comparison
+
+```{r}
+#multiple comparisons seperated by sex
+intox_planned_comparison <- emmeans(model_behavintox, pairwise ~ time | sex)
+intox_planned_comparison
+```
+
+Main Effects:
+
+Behavioral Intoxication Over Time:
+
+Linear Mixed Effects Model
+
+partial eta squared (η²ₚ) - needed for Linear Mixed Effects Model
+
+```{r}
+
+eta_squared(model_behavintox_anova, partial = TRUE)
+
+```
+
+Mean Behavioral Intoxication:
+
+T-Test
+
+Cohen's d
+
+```{r}
+cohens_d(mean_intox_score ~ sex, data = behav_intox_grouped_average)
+```
+
+Peak Behavioral Intoxication
+
+T-Test
+
+```{r}
+cohens_d(max_intox_score ~ sex, data = behav_intox_grouped_peak)
+```
+
+Ethanol Dose Per Day:
+
+Linear Mixed Effects Model
+
+```{r}
+eta_squared(model_dose_anova, partial = TRUE)
+```
+
+Mean Dose
+
+T-Test
+
+```{r}
+cohens_d(dose ~ sex, data = dose_day)
+```
+
+BEC
+
+T-Test
+
+```{r}
+cohens_d(mean_bec ~ sex, data = bec)
+```
+
+Withdrawal Over Time:
+
+Linear Mixed Effects Model
+
+```{r}
+eta_squared(model_withdrawal_anova, partial = TRUE)
+```
+
+Mean Withdrawal
+
+T-Test
+
+```{r}
+cohens_d(mean_with_score ~ sex, data = withdrawal_grouped_average)
+```
+
+Peak Withdrawal
+
+T-Test
+
+```{r}
+cohens_d(max_with_score ~ sex, data = withdrawal_grouped_peak)
+
+```
+
+Chi-Square Test: Convulsions
+
+Cramér’s V
+
+```{r}
+cramerV(observed_convulsions)
+```
+
+Tolerance Planned comparison
+
+Post Hoc
+
+Cohen's d
+
+```{r}
+effect_size_intox_post_hoc <- eff_size(intox_planned_comparison, 
+                                       sigma = sigma(model_behavintox), 
+                                       edf = df.residual(model_behavintox))
+effect_size_intox_post_hoc
 ```
