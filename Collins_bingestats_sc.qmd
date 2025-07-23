@@ -22,6 +22,8 @@ library(emmeans) #for post hoc test
 library(rstatix) #for getsummarystats
 library(effectsize) #for effect size
 library(rcompanion) #for effect size
+library(ggrepel) # graphing names on PCA
+library(lme4) # pulling variances (VarCorr)
 ```
 
 ```{r}
@@ -89,6 +91,8 @@ options(contrasts = c("contr.sum", "contr.poly"))
 model_behavintox <- lmer(intox_score ~ sex * time + (1 | unique_id), data = behav_intox)
 model_behavintox_anova <- anova(model_behavintox)
 print(model_behavintox_anova)
+
+summary(model_behavintox)
 
 #posthoc test
 emmeans_behavintox <- emmeans(model_behavintox, ~ sex | time)
@@ -388,7 +392,7 @@ model_withdrawal_anova <- anova(model_withdrawal)
 print(model_withdrawal_anova)
 
 #posthoc test
-emmeans_withdrawal <- emmeans(model_withdrawal, ~sex | time)
+emmeans_withdrawal <- emmeans(model_withdrawal, ~ sex | time)
 emmeans_withdrawal_results <- pairs(emmeans_withdrawal)
 print(emmeans_withdrawal_results)
 
@@ -434,7 +438,7 @@ ggsave(
 
 ```{r}
 #calculating summary statistics 
-withdrawal_grouped_average<- withdrawal %>%
+withdrawal_grouped_average <- withdrawal %>%
   group_by(sex, unique_id) %>%
   summarize(mean_with_score = mean(with_score, na.rm = TRUE)) #calculating max intox score 
 
@@ -792,4 +796,243 @@ effect_size_intox_post_hoc <- eff_size(intox_planned_comparison,
                                        sigma = sigma(model_behavintox), 
                                        edf = df.residual(model_behavintox))
 effect_size_intox_post_hoc
+```
+
+Pearson Correlations
+
+Females
+
+```{r}
+female_behav_intox_vs_meanWD_pearson <- cor.test(female_correlation_variables$mean, female_correlation_variables$mean_with_score, method = "pearson")
+
+female_behav_intox_vs_peakWD_pearson <- cor.test(female_correlation_variables$mean, female_correlation_variables$max_with_score, method = "pearson")
+
+female_BEC_vs_meanWD_pearson <- cor.test(female_correlation_variables$mean_bec, female_correlation_variables$mean_with_score, method = "pearson")
+
+female_BEC_vs_peakWD_pearson <- cor.test(female_correlation_variables$mean_bec, female_correlation_variables$max_with_score,method = "pearson")
+
+female_behav_intox_vs_BEC_pearson <- cor.test(female_correlation_variables$mean, female_correlation_variables$mean_bec, method = "pearson")
+
+female_behav_intox_vs_meanWD_pearson
+female_behav_intox_vs_peakWD_pearson
+female_BEC_vs_meanWD_pearson
+female_BEC_vs_peakWD_pearson
+female_behav_intox_vs_BEC_pearson
+```
+
+Males
+
+```{r}
+male_behav_intox_vs_meanWD_pearson <- cor.test(male_correlation_variables$mean, male_correlation_variables$mean_with_score, method = "pearson")
+
+male_behav_intox_vs_peakWD_pearson <- cor.test(male_correlation_variables$mean, male_correlation_variables$max_with_score, method = "pearson")
+
+male_BEC_vs_meanWD_pearson <- cor.test(male_correlation_variables$mean_bec, male_correlation_variables$mean_with_score, method = "pearson")
+
+male_BEC_vs_peakWD_pearson <- cor.test(male_correlation_variables$mean_bec, male_correlation_variables$max_with_score,method = "pearson")
+
+male_behav_intox_vs_BEC_pearson <- cor.test(male_correlation_variables$mean, male_correlation_variables$mean_bec, method = "pearson")
+
+male_behav_intox_vs_meanWD_pearson
+male_behav_intox_vs_peakWD_pearson
+male_BEC_vs_meanWD_pearson
+male_BEC_vs_peakWD_pearson
+male_behav_intox_vs_BEC_pearson
+```
+
+F-test two compare two variances (Females vs Males)
+
+I used the var.test() function
+
+```{r}
+# I first needed to filter out between females and males for peak intox and dose by day because I hadn't done it for these yet
+
+#peak intoxication filtering
+
+female_behav_intox_peak <- behav_intox_grouped_peak |> 
+  filter(sex == "female") |> 
+  arrange(unique_id)
+
+male_behav_intox_peak <- behav_intox_grouped_peak |> 
+  filter(sex == "male") |> 
+  arrange(unique_id)
+
+#Mean Dose filtering
+female_dose_mean <- dose_day_mean |> 
+  filter(sex == "female") |> 
+  arrange(unique_id)
+
+male_dose_mean <- dose_day_mean |> 
+  filter(sex == "male") |> 
+  arrange(unique_id)
+
+
+#Running for F-Test
+
+# mean intox
+var.test(x = female_behav_intox_average$mean, y = male_behav_intox_average$mean)
+
+#peak intox
+var.test(x = female_behav_intox_peak$max_intox_score, y = male_behav_intox_peak$max_intox_score)
+
+# mean dose by day
+var.test(x = female_dose_mean$mean, y = male_dose_mean$mean)
+
+#BEC
+var.test(x = female_bec$mean_bec, y = male_bec$mean_bec)
+
+#mean withdrawal
+var.test(x = female_withdrawal_average$mean_with_score, y = male_withdrawal_average$mean_with_score)
+
+#peak withdrawal
+var.test(x = female_withdrawal_peak$max_with_score, y = male_withdrawal_peak$max_with_score)
+
+
+```
+
+PCA - Binge Parameters
+
+```{r}
+
+#PCA Test
+binge_pca <- princomp(x = binge_pca_data_table |> select(-"sex"), cor = TRUE)
+
+#summary results 
+binge_pca_summmary <- summary(binge_pca)
+binge_pca_summmary
+
+
+#summary results in a table 
+
+my_pca_table <- tibble(
+  PC = paste0("PC", 1:6),
+  StdDev = c(1.8685606,	0.9945711,	0.7973316,	0.6495086,	0.6011358,	0.3167743),
+  Variance = c(0.5819198,	0.1648619,	0.1059563,	0.0703103,	0.0602274,	0.0167243),
+  Cumulative = c(0.5819198,	0.7467818,	0.8527380,	0.9230483,	0.9832757,	1.0000000))
+
+my_pca_table
+```
+
+PCA Variance Graphs
+
+```{r}
+ggplot(my_pca_table, aes(x = PC, y = Variance)) +
+  geom_col(fill = "gray30") +
+  geom_point(size = 2) +
+  geom_line(aes(group = 1), linetype = "dashed") +
+  labs(title = "PCA of Binge Parameters Scree Plot",
+       x = "Principal Component",
+       y = "Proportion of Variance Explained") +
+  theme_prism()
+
+ggplot(my_pca_table, aes(x = PC, y = Cumulative)) +
+  geom_line(group = 1, color = "black") +
+  geom_point(size = 3, color = "black") +
+  labs(y = "Cumulative Proportion of Variance",
+       x = "Principal Component") +
+  theme_prism() + scale_y_continuous(limits = c(0.5,1.01), 
+                                     expand = c(0,0), 
+                                     breaks = seq(0.5,1, by = 0.1), 
+                                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.'))
+
+ggsave(
+  "/pca_cumulative_graph.png",
+  path = results_path,
+  height = 5,
+  width = 8.8
+  )
+```
+
+PCA PC1 vs PC2 graphs
+
+```{r}
+
+#creating a table that contains the laodings from the PCA
+binge_PCA_loadings <- as.data.frame(binge_pca$loadings[, 1:2])
+
+#creating a column with each variable name
+
+binge_PCA_loadings$Variable <- c(
+  "Mean Intoxication",
+  "Peak Intoxication",
+  "Dose",
+  "BEC",
+  "Peak Withdrawal",
+  "Mean Withdrawal")
+
+# creaing a scale to change the size of teh arrow
+arrow_scale <- 3
+
+# table with scaled loadings 
+binge_PCA_loadings_scaled <- binge_PCA_loadings |>
+  mutate(Comp.1 = (Comp.1 * arrow_scale),
+         Comp.2 = (Comp.2 * arrow_scale))
+
+#pulling the scores of the PCA to plot individual points and adding sex as column
+binge_PCA_scores <- as.data.frame(binge_pca$scores)
+binge_PCA_scores$sex <- pca_data_table$sex
+
+
+# plot with loadings segmnets and scores (individual points)
+ggplot() +
+  geom_point(data = binge_PCA_scores, aes(x = Comp.1, y = Comp.2), alpha = 0.6, size = 3, shape = 16) +
+  geom_segment(data = binge_PCA_loadings_scaled,
+               aes(x = 0, y = 0, xend = Comp.1, yend = Comp.2),
+               arrow = arrow(length = unit(0.5, "cm")),
+               color = "black") +
+  geom_text_repel(data = binge_PCA_loadings_scaled,
+                  aes(x = Comp.1, y = Comp.2, label = Variable),
+                  size = 5, max.overlaps = 3) +
+  labs(x = "PC1 (58.19%)",
+       y = "PC2 (16.49%)") +
+  coord_equal() +
+  theme_prism() +
+  scale_x_continuous(limits = c(-6.0,6.0), 
+                     expand = c(0,0), 
+                     breaks = seq(-6,6), 
+                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.')) +
+  scale_y_continuous(limits = c(-3.0,3.0), 
+                     expand = c(0,0), 
+                     breaks = seq(-3,3), 
+                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.'))
+
+
+ggsave(
+  "/pca_loading_graph.png",
+  path = results_path,
+  height = 5,
+  width = 8.8
+  )
+
+
+# plot with  scores (individual points) by sex
+ggplot() +
+  geom_point(data = binge_PCA_scores, aes(x = Comp.1, y = Comp.2, color = sex), alpha = 0.6, size = 3, shape = 16) +
+  stat_ellipse(data = binge_PCA_scores,
+               aes(x = Comp.1, y = Comp.2, color = sex),
+               type = "norm",
+               level = 0.68,
+               linetype = "dashed") +
+  labs(x = "PC1 (58.19%)",
+       y = "PC2 (16.49%)") +
+  coord_equal() +
+  theme_prism() + 
+  theme(legend.position = "none") +
+  scale_x_continuous(limits = c(-6.0,6.0), 
+                     expand = c(0,0), 
+                     breaks = seq(-6,6), 
+                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.')) +
+  scale_y_continuous(limits = c(-3.0,3.0), 
+                     expand = c(0,0), 
+                     breaks = seq(-3,3), 
+                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.'))
+
+ggsave(
+  "/pca_sex_graph.png",
+  path = results_path,
+  height = 5,
+  width = 8.8
+  )
+
+
 ```
