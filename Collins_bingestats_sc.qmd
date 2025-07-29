@@ -1036,3 +1036,44 @@ ggsave(
 
 
 ```
+
+PCA all combined
+
+```{r pca-plot, fig.width=6, fig.height=5, out.width="80%", fig.align="center"}
+pca_plot <- ggplot() +
+  geom_point(data = binge_PCA_scores, aes(x = Comp.1, y = Comp.2, color = sex), alpha = 0.6, size = 3, shape = 16) +
+  geom_segment(data = binge_PCA_loadings_scaled,
+               aes(x = 0, y = 0, xend = Comp.1, yend = Comp.2),
+               arrow = arrow(length = unit(0.5, "cm")),
+               color = "black") +
+  geom_text_repel(
+    data = binge_PCA_loadings_scaled,
+    aes(x = Comp.1, y = Comp.2, label = Variable),
+    size = 5,
+    max.overlaps = Inf,     # Avoid hiding labels
+    box.padding =1.5 ,      # Space around the text box
+    point.padding = 1     # Space around arrow ends
+  ) +
+  stat_ellipse(data = binge_PCA_scores,
+               aes(x = Comp.1, y = Comp.2, color = sex),
+               type = "norm",
+               level = 0.68,
+               linetype = "dashed") +
+  labs(x = "PC1 (58.19%)",
+       y = "PC2 (16.49%)") +
+  coord_equal(xlim = c(-6,6)) +
+  theme_prism() + 
+  theme(legend.position = "none") +
+  scale_x_continuous(limits = c(-6.0,6.0), 
+                     expand = c(0,0), 
+                     breaks = seq(-6,6.0), 
+                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.')) +
+  scale_y_continuous(limits = c(-3.0,3.0), 
+                     expand = c(0,0), 
+                     breaks = seq(-3,3), 
+                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.'))
+pca_plot
+
+ggsave("binge_pca_plot.png", plot = pca_plot,
+       width = 7, height = 6, dpi = 600, units = "in")
+```
