@@ -890,9 +890,62 @@ var.test(x = female_withdrawal_peak$max_with_score, y = male_withdrawal_peak$max
 
 ```
 
+Creating a new tables for summary data:
+
+```{r}
+# creating a new table showing every bodies data 
+binge_table <- binge_stats_filtered |> 
+  select(study, binge_date, sex, unique_id)
+
+#Mean intox
+
+behav_intox_average_rename <- behav_intox_average |> 
+rename(mean_intoxication = mean)
+
+#Peak intox
+behav_intox_peak_rename <- behav_intox_peak |> 
+  rename(peak_intoxication = mean)
+
+#Dose 
+
+dose_day_mean_rename <- dose_day_mean |> 
+  rename(mean_dose = mean)
+
+#joining all mean binge data into one main table 
+binge_table2 <- binge_table |> 
+  full_join(behav_intox_average_rename) |> 
+  full_join(behav_intox_peak_rename) |> 
+  full_join(dose_day_mean_rename) |> 
+  full_join(bec) |> 
+  full_join(withdrawal_grouped_average) |> 
+  full_join(withdrawal_grouped_peak)
+
+#full summary of all binges used in the paper 
+
+binge_table3 <- binge_table2 |>
+  group_by(study, sex) |> 
+  summarise(Binge = print(study), date = print(binge_date),n = n(), 
+            mean_intox = mean(mean_intoxication), sem_mean_intox = sd(mean_intoxication) / sqrt(length(mean_intoxication)), 
+            peak_intox = mean(peak_intoxication), sem_peak_intox = sd(peak_intoxication) / sqrt(length(peak_intoxication)), 
+            mean_dose_by_day = mean(mean_dose), sem_mean_dose_by_day = sd(mean_dose) / sqrt(length(mean_dose)),
+            bec_mean = mean(mean_bec), sem_bec_mean = sd(mean_bec) / sqrt(length(mean_bec)),
+            mean_with = mean(mean_with_score), sem_mean_with = sd(mean_with_score) / sqrt(length(mean_with_score)), 
+            peak_with = mean(max_with_score), sem_peak_with = sd(max_with_score) / sqrt(length(max_with_score))) |>
+  distinct() |> 
+  arrange(study, sex, date)
+```
+
+\
+
 PCA - Binge Parameters
 
 ```{r}
+
+# creating PCA table 
+binge_pca_data_table <- binge_table2 |> 
+  select("sex", "mean_intoxication", "peak_intoxication", "mean_dose", "mean_bec", "mean_with_score", "max_with_score") |>
+  mutate(sex = as.factor(sex))
+
 
 #PCA Test
 binge_pca <- princomp(x = binge_pca_data_table |> select(-"sex"), cor = TRUE)
@@ -901,9 +954,14 @@ binge_pca <- princomp(x = binge_pca_data_table |> select(-"sex"), cor = TRUE)
 binge_pca_summmary <- summary(binge_pca)
 binge_pca_summmary
 
+# PC loadings
+binge_pca$loadings
+
+# scores for each PC
+binge_pca$scores
+
 
 #summary results in a table 
-
 my_pca_table <- tibble(
   PC = paste0("PC", 1:6),
   StdDev = c(1.8685606,	0.9945711,	0.7973316,	0.6495086,	0.6011358,	0.3167743),
@@ -916,164 +974,232 @@ my_pca_table
 PCA Variance Graphs
 
 ```{r}
-ggplot(my_pca_table, aes(x = PC, y = Variance)) +
+
+#proportion of variance graph 
+pca_proportion <- ggplot(my_pca_table, aes(x = PC, y = Variance)) +
   geom_col(fill = "gray30") +
   geom_point(size = 2) +
   geom_line(aes(group = 1), linetype = "dashed") +
-  labs(title = "PCA of Binge Parameters Scree Plot",
-       x = "Principal Component",
+  labs(x = "Principal Component",
        y = "Proportion of Variance Explained") +
-  theme_prism()
+  theme_prism(base_size = 10) +
+  scale_y_continuous(
+    limits = c(0.0, 0.6), 
+    expand = c(0, 0), 
+    breaks = seq(0.0, 0.6, by = 0.1), 
+    labels = scales::number_format(accuracy = 0.1, decimal.mark = '.')
+  )
 
-ggplot(my_pca_table, aes(x = PC, y = Cumulative)) +
+pca_proportion
+
+
+#cumulative of variance graph 
+pca_cumulative <- ggplot(my_pca_table, aes(x = PC, y = Cumulative)) +
   geom_line(group = 1, color = "black") +
   geom_point(size = 3, color = "black") +
-  labs(y = "Cumulative Proportion of Variance",
+  labs(y = "Cumulative Proportion",
        x = "Principal Component") +
-  theme_prism() + scale_y_continuous(limits = c(0.5,1.01), 
+  theme_prism(base_size = 10) + 
+  scale_y_continuous(limits = c(0.5,1.01), 
                                      expand = c(0,0), 
-                                     breaks = seq(0.5,1, by = 0.1), 
-                                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.'))
+                                     breaks = seq(0.5,1.01, by = 0.1), 
+                                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.'))+
+  scale_x_discrete(drop = FALSE)
 
-ggsave(
-  "/pca_cumulative_graph.png",
-  path = results_path,
-  height = 5,
-  width = 8.8
-  )
+pca_cumulative
+
 ```
+
+\
 
 PCA PC1 vs PC2 graphs
 
 ```{r}
 
 #creating a table that contains the laodings from the PCA
-binge_PCA_loadings <- as.data.frame(binge_pca$loadings[, 1:2])
-
-#creating a column with each variable name
+binge_PCA_loadings <- as.data.frame(binge_pca$loadings[, 1:2]) 
 
 binge_PCA_loadings$Variable <- c(
-  "Mean Intoxication",
-  "Peak Intoxication",
+  "Mean Intox",
+  "Peak Intox",
   "Dose",
   "BEC",
-  "Peak Withdrawal",
-  "Mean Withdrawal")
+  "Peak WD",
+  "Mean WD")
 
 # creaing a scale to change the size of teh arrow
 arrow_scale <- 3
 
 # table with scaled loadings 
 binge_PCA_loadings_scaled <- binge_PCA_loadings |>
-  mutate(Comp.1 = (Comp.1 * arrow_scale),
-         Comp.2 = (Comp.2 * arrow_scale))
-
+  mutate(
+    Comp.1 = Comp.1 * arrow_scale,
+    Comp.2 = Comp.2 * arrow_scale
+  )
 #pulling the scores of the PCA to plot individual points and adding sex as column
 binge_PCA_scores <- as.data.frame(binge_pca$scores)
-binge_PCA_scores$sex <- pca_data_table$sex
+binge_PCA_scores$sex <- binge_pca_data_table$sex
 
 
 # plot with loadings segmnets and scores (individual points)
-ggplot() +
-  geom_point(data = binge_PCA_scores, aes(x = Comp.1, y = Comp.2), alpha = 0.6, size = 3, shape = 16) +
-  geom_segment(data = binge_PCA_loadings_scaled,
-               aes(x = 0, y = 0, xend = Comp.1, yend = Comp.2),
-               arrow = arrow(length = unit(0.5, "cm")),
-               color = "black") +
-  geom_text_repel(data = binge_PCA_loadings_scaled,
-                  aes(x = Comp.1, y = Comp.2, label = Variable),
-                  size = 5, max.overlaps = 3) +
-  labs(x = "PC1 (58.19%)",
-       y = "PC2 (16.49%)") +
-  coord_equal() +
-  theme_prism() +
-  scale_x_continuous(limits = c(-6.0,6.0), 
-                     expand = c(0,0), 
-                     breaks = seq(-6,6), 
-                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.')) +
-  scale_y_continuous(limits = c(-3.0,3.0), 
-                     expand = c(0,0), 
-                     breaks = seq(-3,3), 
-                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.'))
-
-
-ggsave(
-  "/pca_loading_graph.png",
-  path = results_path,
-  height = 5,
-  width = 8.8
-  )
-
-
-# plot with  scores (individual points) by sex
-ggplot() +
-  geom_point(data = binge_PCA_scores, aes(x = Comp.1, y = Comp.2, color = sex), alpha = 0.6, size = 3, shape = 16) +
-  stat_ellipse(data = binge_PCA_scores,
-               aes(x = Comp.1, y = Comp.2, color = sex),
-               type = "norm",
-               level = 0.68,
-               linetype = "dashed") +
-  labs(x = "PC1 (58.19%)",
-       y = "PC2 (16.49%)") +
-  coord_equal() +
-  theme_prism() + 
-  theme(legend.position = "none") +
-  scale_x_continuous(limits = c(-6.0,6.0), 
-                     expand = c(0,0), 
-                     breaks = seq(-6,6), 
-                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.')) +
-  scale_y_continuous(limits = c(-3.0,3.0), 
-                     expand = c(0,0), 
-                     breaks = seq(-3,3), 
-                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.'))
-
-ggsave(
-  "/pca_sex_graph.png",
-  path = results_path,
-  height = 5,
-  width = 8.8
-  )
-
-
-```
-
-PCA all combined
-
-```{r pca-plot, fig.width=6, fig.height=5, out.width="80%", fig.align="center"}
 pca_plot <- ggplot() +
   geom_point(data = binge_PCA_scores, aes(x = Comp.1, y = Comp.2, color = sex), alpha = 0.6, size = 3, shape = 16) +
   geom_segment(data = binge_PCA_loadings_scaled,
                aes(x = 0, y = 0, xend = Comp.1, yend = Comp.2),
                arrow = arrow(length = unit(0.5, "cm")),
                color = "black") +
-  geom_text_repel(
-    data = binge_PCA_loadings_scaled,
-    aes(x = Comp.1, y = Comp.2, label = Variable),
-    size = 5,
-    max.overlaps = Inf,     # Avoid hiding labels
-    box.padding =1.5 ,      # Space around the text box
-    point.padding = 1     # Space around arrow ends
-  ) +
   stat_ellipse(data = binge_PCA_scores,
                aes(x = Comp.1, y = Comp.2, color = sex),
                type = "norm",
                level = 0.68,
                linetype = "dashed") +
-  labs(x = "PC1 (58.19%)",
-       y = "PC2 (16.49%)") +
-  coord_equal(xlim = c(-6,6)) +
+  labs(x = "PC1 (58.2%)",
+       y = "PC2 (16.5%)") +
   theme_prism() + 
+  coord_equal() + 
   theme(legend.position = "none") +
-  scale_x_continuous(limits = c(-6.0,6.0), 
+  scale_x_continuous(limits = c(-6.0, 6.1), 
                      expand = c(0,0), 
-                     breaks = seq(-6,6.0), 
-                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.')) +
+                     breaks = seq(-6,6.1)) +
   scale_y_continuous(limits = c(-3.0,3.0), 
                      expand = c(0,0), 
-                     breaks = seq(-3,3), 
-                     labels = scales::number_format(accuracy = 0.1, decimal.mark = '.'))
+                     breaks = seq(-3,3))
+
 pca_plot
 
-ggsave("binge_pca_plot.png", plot = pca_plot,
-       width = 7, height = 6, dpi = 600, units = "in")
+
+
 ```
+
+ggsave("binge_pca_plot.png", plot = pca_plot2, width = 7, height = 6, dpi = 600, units = "in")\
+\
+\
+\
+PCA Density Plots
+
+```{r}
+
+# Plot
+PC1_density <- ggplot(binge_PCA_scores, aes(x = Comp.1, fill = sex)) +
+  geom_density(alpha = 0.5, color = "black") +
+  labs(title = "",
+       x = "PC1 Score",
+       y = "Density") +
+  theme_prism() +
+  theme(legend.position = "none",
+        axis.text = element_text(size = 20),
+        axis.title = element_text(size = 15)) +
+  scale_x_continuous(limits = c(-6.0, 6.3), 
+                     expand = c(0,0), 
+                     breaks = seq(-6.0,6.3, by = 2.0)) +
+  scale_y_continuous(
+    limits = c(0.0, 1.0), 
+    expand = c(0, 0), 
+    breaks = seq(0.0, 1.0)) + labs(y = NULL)
+
+PC1_density
+
+
+PC2_density <- ggplot(binge_PCA_scores, aes(x = Comp.2, fill = sex)) +
+  geom_density(alpha = 0.5, color = "black") +
+  labs(title = "",
+       x = "PC2 Score") +
+  theme_prism() +
+  theme(legend.position = "none",
+        axis.text = element_text(size = 20),
+        axis.title = element_text(size = 15)) +
+  scale_x_continuous(limits = c(-6.0, 6.3), 
+                     expand = c(0,0), 
+                     breaks = seq(-6.0,6.3, by = 2.0)) +
+  scale_y_continuous(
+    limits = c(0.0, 1.0), 
+    expand = c(0, 0), 
+    breaks = seq(0.0, 1.0)) + labs(y = NULL)
+
+PC2_density
+
+
+PC3_density <- ggplot(binge_PCA_scores, aes(x = Comp.3, fill = sex)) +
+  geom_density(alpha = 0.5, color = "black") +
+  labs(title = "",
+       x = "PC3 Score") +
+  theme_prism() +
+  theme(legend.position = "none",
+        axis.text = element_text(size = 20),
+        axis.title = element_text(size = 15)) +
+  scale_x_continuous(limits = c(-6.0, 6.3), 
+                     expand = c(0,0), 
+                     breaks = seq(-6.0,6.3, by = 2.0)) +
+  scale_y_continuous(
+    limits = c(0.0, 1.0), 
+    expand = c(0, 0), 
+    breaks = seq(0.0, 1.0)) + labs(y = NULL)
+
+
+PC3_density
+
+PC4_density <- ggplot(binge_PCA_scores, aes(x = Comp.4, fill = sex)) +
+  geom_density(alpha = 0.5, color = "black") +
+  labs(title = "",
+       x = "PC4 Score") +
+  theme_prism() +
+  theme(legend.position = "none",
+        axis.text = element_text(size = 20),
+        axis.title = element_text(size = 15)) +
+  scale_x_continuous(limits = c(-6.0, 6.3), 
+                     expand = c(0,0), 
+                     breaks = seq(-6.0,6.3, by = 2.0)) +
+  scale_y_continuous(
+    limits = c(0.0, 1.0), 
+    expand = c(0, 0), 
+    breaks = seq(0.0, 1.0)) + labs(y = NULL)
+
+PC4_density
+
+
+PC5_density <- ggplot(binge_PCA_scores, aes(x = Comp.5, fill = sex)) +
+  geom_density(alpha = 0.5, color = "black") +
+  labs(title = "",
+       x = "PC5 Score") +
+  theme_prism() +
+  theme(legend.position = "none",
+        axis.text = element_text(size = 20),
+        axis.title = element_text(size = 15)) +
+  scale_x_continuous(limits = c(-6.0, 6.3), 
+                     expand = c(0,0), 
+                     breaks = seq(-6.0,6.3, by = 2.0)) +
+  scale_y_continuous(
+    limits = c(0.0, 1.0), 
+    expand = c(0, 0), 
+    breaks = seq(0.0, 1.0)) + labs(y = NULL)
+
+PC6_density <- ggplot(binge_PCA_scores, aes(x = Comp.6, fill = sex)) +
+  geom_density(alpha = 0.5, color = "black") +
+  labs(title = "",
+       x = "PC6 Score") +
+  theme_prism() +
+  theme(legend.position = "none",
+        axis.text = element_text(size = 20),
+        axis.title = element_text(size = 15)) +
+  scale_x_continuous(limits = c(-6.0, 6.3), 
+                     expand = c(0,0), 
+                     breaks = seq(-6.0,6.3, by = 2.0)) +
+  scale_y_continuous(
+    limits = c(0.0, 2.0), 
+    expand = c(0, 0), 
+    breaks = seq(0.0, 2.0, by = 1)) + labs(y = NULL)
+
+PC6_density
+
+```
+
+\
+
+Use this to save graphs
+
+ggsave("PC5_density_plot.png", plot = PC5_density, width = 4, height = 4, dpi = 600, units = "in", limitsize = FALSE)\
+
+\
+
+\
+\
